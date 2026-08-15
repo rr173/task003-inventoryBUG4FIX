@@ -75,6 +75,17 @@ func New() *Store {
 
 func trim(s string) string { return strings.TrimSpace(s) }
 
+// cloneTime 返回 t 所指时间的副本指针；t 为 nil 时返回 nil。
+// 用于在对外快照中切断时间指针与内部存储的共享，避免外部通过解引用
+// 修改返回的时间值时回写污染内部状态。
+func cloneTime(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	v := *t
+	return &v
+}
+
 // lowStockOf 判断商品是否处于低库存：阈值已设置且库存不超过阈值。
 func lowStockOf(p *Product) bool {
 	return p.Threshold > 0 && p.Stock <= p.Threshold
@@ -92,8 +103,14 @@ func statusOf(p *Product) string {
 }
 
 // view 返回商品的只读副本，并派生状态与低库存标记。
+// 时间指针字段（LastInAt/LastOutAt/DiscontinuedAt）做深拷贝，
+// 确保对外快照不与内部存储共享底层 time.Time，外部通过解引用
+// 修改返回的时间值不会回写污染内部状态。
 func (p *Product) view() *Product {
 	c := *p
+	c.LastInAt = cloneTime(p.LastInAt)
+	c.LastOutAt = cloneTime(p.LastOutAt)
+	c.DiscontinuedAt = cloneTime(p.DiscontinuedAt)
 	c.LowStock = lowStockOf(&c)
 	c.Status = statusOf(&c)
 	return &c
